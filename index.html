@@ -6,7 +6,7 @@
 <title>GYH — Book Your Session</title>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { getFirestore, collection, doc, setDoc, getDoc, getDocs, updateDoc, query, where, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 const cfg = {
   apiKey:"AIzaSyD74nDiTH5N7MbrebMeCvGvEoN-MiBeAjE",
@@ -16,719 +16,687 @@ const cfg = {
   messagingSenderId:"121868556583",
   appId:"1:121868556583:web:4db28f288568bf7839f102"
 };
-const app = initializeApp(cfg);
+const app  = initializeApp(cfg);
 const auth = getAuth(app);
 const db   = getFirestore(app);
-window._FB = { auth, db, collection, doc, setDoc, getDoc, getDocs, updateDoc, query, where, onSnapshot, serverTimestamp };
-window._FB.ready = true;
+window._gyh = { auth, db, signInWithEmailAndPassword, signOut, onAuthStateChanged, collection, doc, setDoc, getDoc, getDocs, updateDoc, query, where, onSnapshot, serverTimestamp };
 document.dispatchEvent(new Event('fbReady'));
 </script>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600;700&display=swap');
-  *{margin:0;padding:0;box-sizing:border-box}
-  :root{
-    --bg:#060608;--surf:#0f0f14;--card:#16161e;--border:#222230;
-    --text:#f0f0eb;--muted:#6b6b80;--accent:#d4ff00;--accent2:#b8e000;
-    --green:#00e676;--red:#ff4444;--blue:#4d9fff;--purple:#aa66ff;
-    --yellow:#ffbb00;--pink:#ff69b4;--orange:#ff8c00;
-  }
-  html,body{height:100%;overflow:hidden}
-  body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text)}
+@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600;700&display=swap');
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#07070a;--surf:#0f0f15;--card:#131319;--card2:#18181f;--border:#21212d;--border2:#2a2a38;
+  --text:#f0f0eb;--muted:#5c5c70;--muted2:#3a3a4a;
+  --accent:#d4ff00;--accent2:#b8e000;--accent-dim:rgba(212,255,0,.08);
+  --green:#00e676;--red:#ff4444;--blue:#4d9fff;--purple:#aa66ff;--yellow:#ffbb00;--pink:#ff69b4;--orange:#ff8c00;
+}
+html,body{height:100%;overflow:hidden;background:var(--bg)}
+body{font-family:'DM Sans',sans-serif;color:var(--text)}
 
-  /* ── CANVAS BG ── */
-  #bg-canvas{position:fixed;inset:0;z-index:0;pointer-events:none}
+/* ── CANVAS ── */
+#bg-c{position:fixed;inset:0;z-index:0;pointer-events:none}
 
-  /* ── LOADER ── */
-  #loader{position:fixed;inset:0;z-index:9999;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;transition:opacity .6s}
-  #loader.out{opacity:0;pointer-events:none}
-  .ld-ring{width:72px;height:72px;border-radius:50%;border:2px solid transparent;border-top-color:var(--accent);animation:spin 1s linear infinite;margin-bottom:20px;position:relative}
-  .ld-ring::before{content:'';position:absolute;inset:5px;border-radius:50%;border:2px solid transparent;border-top-color:rgba(212,255,0,.3);animation:spin .7s linear infinite reverse}
-  .ld-text{font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:4px;color:var(--accent);animation:pulse 1.4s ease-in-out infinite}
-  @keyframes spin{to{transform:rotate(360deg)}}
-  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+/* ── LOADER ── */
+#loader{position:fixed;inset:0;z-index:9999;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;transition:opacity .7s}
+#loader.out{opacity:0;pointer-events:none}
+.ld-logo-wrap{position:relative;margin-bottom:28px}
+.ld-logo-img{width:80px;height:80px;object-fit:contain;border-radius:16px;animation:logoFloat 2s ease-in-out infinite}
+.ld-glow{position:absolute;inset:-10px;border-radius:24px;background:radial-gradient(circle,rgba(212,255,0,.18) 0,transparent 70%);animation:glowPulse 2s ease-in-out infinite}
+@keyframes logoFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
+@keyframes glowPulse{0%,100%{opacity:.5;transform:scale(1)}50%{opacity:1;transform:scale(1.08)}}
+.ld-brand{font-family:'Bebas Neue',sans-serif;font-size:26px;letter-spacing:5px;color:var(--accent);margin-bottom:6px}
+.ld-sub{font-size:11px;letter-spacing:3px;text-transform:uppercase;color:var(--muted);margin-bottom:28px}
+.ld-bar{width:160px;height:2px;background:var(--border2);border-radius:2px;overflow:hidden}
+.ld-fill{height:100%;background:var(--accent);animation:ldFill 1.4s ease forwards}
+@keyframes ldFill{from{width:0}to{width:100%}}
 
-  /* ── AUTH GATE ── */
-  #auth-gate{position:fixed;inset:0;z-index:500;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(6,6,8,.92);backdrop-filter:blur(12px)}
-  #auth-gate.hidden{display:none}
-  .auth-card{background:var(--card);border:1px solid var(--border);border-radius:20px;padding:40px 36px;max-width:400px;width:90%;text-align:center}
-  .auth-card .logo-text{font-family:'Bebas Neue',sans-serif;font-size:28px;letter-spacing:3px;color:var(--accent);margin-bottom:6px}
-  .auth-card p{color:var(--muted);font-size:13px;margin-bottom:24px}
-  .fi{width:100%;padding:11px 14px;background:#0a0a10;border:1px solid var(--border);border-radius:10px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:14px;outline:none;transition:border-color .2s;margin-bottom:12px}
-  .fi:focus{border-color:var(--accent)}
-  .btn-primary{width:100%;padding:13px;background:var(--accent);color:#000;border:none;border-radius:10px;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:700;cursor:pointer;transition:all .2s;letter-spacing:.5px}
-  .btn-primary:hover{filter:brightness(1.08);transform:translateY(-1px)}
-  .auth-err{color:var(--red);font-size:12px;margin-bottom:10px;min-height:16px}
-  .role-sel{width:100%;padding:11px 14px;background:#0a0a10;border:1px solid var(--border);border-radius:10px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:14px;outline:none;margin-bottom:12px;cursor:pointer}
-  .role-sel:focus{border-color:var(--accent)}
+/* ── AUTH GATE ── */
+#auth-gate{position:fixed;inset:0;z-index:200;display:flex;align-items:center;justify-content:center;background:rgba(7,7,10,.9);backdrop-filter:blur(16px);transition:opacity .4s}
+#auth-gate.out{opacity:0;pointer-events:none}
+.auth-card{background:var(--card);border:1px solid var(--border2);border-radius:22px;padding:44px 40px 36px;width:100%;max-width:400px;position:relative;overflow:hidden;animation:cardIn .5s ease}
+.auth-card::before{content:'';position:absolute;top:-60px;right:-60px;width:160px;height:160px;background:radial-gradient(circle,rgba(212,255,0,.12) 0,transparent 70%);pointer-events:none}
+@keyframes cardIn{from{transform:translateY(24px);opacity:0}to{transform:translateY(0);opacity:1}}
+.auth-logo{display:flex;align-items:center;gap:12px;margin-bottom:26px}
+.auth-logo-img{width:44px;height:44px;object-fit:contain;border-radius:10px}
+.auth-logo-text{font-family:'Bebas Neue',sans-serif;font-size:17px;letter-spacing:1.5px;line-height:1.2}
+.auth-logo-sub{font-family:'DM Sans',sans-serif;font-size:9px;font-weight:700;letter-spacing:2.5px;text-transform:uppercase;color:var(--accent)}
+.auth-h{font-family:'Bebas Neue',sans-serif;font-size:30px;letter-spacing:2px;margin-bottom:4px}
+.auth-p{font-size:12px;color:var(--muted);margin-bottom:24px}
+.fi{width:100%;padding:11px 15px;background:#0a0a11;border:1px solid var(--border2);border-radius:10px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:14px;outline:none;transition:border-color .2s,box-shadow .2s;margin-bottom:12px}
+.fi:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(212,255,0,.07)}
+.fi::placeholder{color:var(--muted2)}
+.auth-err{font-size:12px;color:var(--red);min-height:18px;margin-bottom:8px;padding-left:2px}
+.auth-ok{font-size:12px;color:var(--green);min-height:18px;margin-bottom:8px;padding-left:2px}
+.btn-signin{width:100%;padding:13px;background:var(--accent);color:#000;border:none;border-radius:10px;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:700;cursor:pointer;letter-spacing:.5px;transition:all .2s;display:flex;align-items:center;justify-content:center;gap:8px}
+.btn-signin:hover{filter:brightness(1.08);transform:translateY(-1px);box-shadow:0 8px 24px rgba(212,255,0,.25)}
+.btn-signin:disabled{opacity:.5;cursor:not-allowed;transform:none}
+.access-note{margin-top:16px;text-align:center;font-size:11px;color:var(--muted);padding:10px;background:rgba(212,255,0,.04);border:1px solid rgba(212,255,0,.1);border-radius:8px;line-height:1.6}
 
-  /* ── MAIN LAYOUT ── */
-  #app{position:fixed;inset:0;z-index:10;display:flex;flex-direction:column;opacity:0;transition:opacity .5s}
-  #app.visible{opacity:1}
+/* ── MAIN ── */
+#app{position:fixed;inset:0;z-index:10;display:flex;flex-direction:column;opacity:0;pointer-events:none;transition:opacity .5s}
+#app.on{opacity:1;pointer-events:all}
 
-  /* ── TOP BAR ── */
-  .topbar{height:58px;background:rgba(15,15,20,.85);backdrop-filter:blur(20px);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 24px;gap:16px;flex-shrink:0}
-  .tb-brand{font-family:'Bebas Neue',sans-serif;font-size:18px;letter-spacing:2px;color:var(--accent)}
-  .tb-sep{width:1px;height:22px;background:var(--border)}
-  .tb-title{font-size:13px;font-weight:600;color:var(--muted)}
-  .tb-user{margin-left:auto;display:flex;align-items:center;gap:10px}
-  .user-pill{display:flex;align-items:center;gap:8px;background:var(--card);border:1px solid var(--border);border-radius:30px;padding:6px 14px 6px 8px}
-  .user-av{width:28px;height:28px;border-radius:50%;background:rgba(212,255,0,.15);color:var(--accent);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:11px}
-  .user-name{font-size:12px;font-weight:600}
-  .btn-out{background:transparent;border:1px solid var(--border);border-radius:8px;padding:6px 12px;color:var(--muted);font-size:12px;cursor:pointer;transition:all .2s}
-  .btn-out:hover{border-color:var(--red);color:var(--red)}
-  .role-badge{font-size:10px;font-weight:700;letter-spacing:1px;padding:3px 8px;border-radius:20px}
-  .rb-admin{background:rgba(170,102,255,.15);color:var(--purple)}
-  .rb-client{background:rgba(212,255,0,.12);color:var(--accent)}
+/* ── TOPBAR ── */
+.topbar{height:60px;background:rgba(13,13,19,.88);backdrop-filter:blur(24px);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 26px;gap:14px;flex-shrink:0;z-index:50}
+.tb-logo{display:flex;align-items:center;gap:10px}
+.tb-logo-img{width:32px;height:32px;object-fit:contain;border-radius:8px}
+.tb-brand{font-family:'Bebas Neue',sans-serif;font-size:16px;letter-spacing:2px;color:var(--accent)}
+.tb-sep{width:1px;height:20px;background:var(--border2)}
+.tb-title{font-size:12px;font-weight:600;color:var(--muted);letter-spacing:.5px}
+.tb-right{margin-left:auto;display:flex;align-items:center;gap:10px}
+.user-chip{display:flex;align-items:center;gap:8px;background:var(--card);border:1px solid var(--border);border-radius:30px;padding:5px 14px 5px 6px}
+.u-av{width:28px;height:28px;border-radius:50%;background:rgba(212,255,0,.12);color:var(--accent);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:11px;flex-shrink:0}
+.u-nm{font-size:12px;font-weight:600;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.role-pill{font-size:9px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;padding:3px 9px;border-radius:20px}
+.rp-client{background:rgba(212,255,0,.1);color:var(--accent)}
+.rp-admin{background:rgba(170,102,255,.12);color:var(--purple)}
+.rp-coord{background:rgba(77,159,255,.12);color:var(--blue)}
+.btn-out{background:transparent;border:1px solid var(--border2);border-radius:8px;padding:6px 13px;color:var(--muted);font-size:12px;font-family:'DM Sans',sans-serif;cursor:pointer;transition:all .2s}
+.btn-out:hover{border-color:var(--red);color:var(--red)}
 
-  /* ── MAIN SCROLL ── */
-  .main-body{flex:1;overflow-y:auto;overflow-x:hidden;padding:28px 24px;scroll-behavior:smooth}
-  .main-body::-webkit-scrollbar{width:4px}
-  .main-body::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px}
+/* ── BODY SCROLL ── */
+.body-scroll{flex:1;overflow-y:auto;overflow-x:hidden}
+.body-scroll::-webkit-scrollbar{width:3px}
+.body-scroll::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px}
+.inner{padding:28px 26px 40px;max-width:1200px;margin:0 auto}
 
-  /* ── HERO ── */
-  .hero{text-align:center;margin-bottom:36px;padding:20px 0 0}
-  .hero-eyebrow{font-size:11px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:var(--accent);margin-bottom:10px;opacity:.8}
-  .hero-title{font-family:'Bebas Neue',sans-serif;font-size:clamp(36px,6vw,64px);letter-spacing:2px;line-height:1;margin-bottom:10px;background:linear-gradient(135deg,#fff 0%,var(--accent) 60%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
-  .hero-sub{font-size:14px;color:var(--muted);max-width:480px;margin:0 auto}
+/* ── HERO ── */
+.hero{text-align:center;margin-bottom:34px;padding-top:10px}
+.hero-eye{font-size:10px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:var(--accent);margin-bottom:10px;opacity:.75}
+.hero-h{font-family:'Bebas Neue',sans-serif;font-size:clamp(38px,6vw,68px);letter-spacing:2px;line-height:1;margin-bottom:10px;background:linear-gradient(130deg,#fff 0%,var(--accent) 55%,#fff 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;background-size:200% auto;animation:shimmer 4s linear infinite}
+@keyframes shimmer{0%{background-position:200% center}100%{background-position:-200% center}}
+.hero-sub{font-size:13px;color:var(--muted);max-width:460px;margin:0 auto;line-height:1.7}
 
-  /* ── PERIOD TABS ── */
-  .period-tabs{display:flex;gap:10px;justify-content:center;margin-bottom:32px}
-  .ptab{display:flex;align-items:center;gap:7px;padding:9px 22px;border-radius:30px;border:1px solid var(--border);background:var(--card);color:var(--muted);font-size:13px;font-weight:600;cursor:pointer;transition:all .25s;letter-spacing:.3px}
-  .ptab.active{background:var(--accent);color:#000;border-color:var(--accent);box-shadow:0 0 20px rgba(212,255,0,.25)}
-  .ptab:hover:not(.active){border-color:var(--accent);color:var(--text)}
+/* ── STATS ── */
+.stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:28px}
+.st-card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;text-align:center;position:relative;overflow:hidden;transition:transform .2s,border-color .2s}
+.st-card:hover{transform:translateY(-2px);border-color:var(--border2)}
+.st-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px}
+.st-a::before{background:var(--accent)}.st-g::before{background:var(--green)}.st-r::before{background:var(--red)}.st-b::before{background:var(--blue)}
+.st-val{font-family:'Bebas Neue',sans-serif;font-size:38px;letter-spacing:1px;line-height:1}
+.st-lbl{font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-top:3px}
 
-  /* ── SLOTS GRID ── */
-  .slots-section{margin-bottom:32px}
-  .section-label{font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:16px;display:flex;align-items:center;gap:10px}
-  .section-label::after{content:'';flex:1;height:1px;background:var(--border)}
-  .slots-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px}
+/* ── TABS ── */
+.ptabs{display:flex;gap:8px;justify-content:center;margin-bottom:30px}
+.ptab{display:flex;align-items:center;gap:7px;padding:9px 22px;border-radius:30px;border:1px solid var(--border2);background:var(--card);color:var(--muted);font-size:13px;font-weight:600;cursor:pointer;transition:all .22s}
+.ptab.on{background:var(--accent);color:#000;border-color:var(--accent);box-shadow:0 0 22px rgba(212,255,0,.22)}
+.ptab:hover:not(.on){border-color:var(--border2);color:var(--text);background:var(--card2)}
 
-  /* ── SLOT CARD 3D ── */
-  .slot-wrap{perspective:800px}
-  .slot-card{
-    background:var(--card);border:1px solid var(--border);border-radius:18px;padding:22px;
-    cursor:pointer;position:relative;overflow:hidden;
-    transform-style:preserve-3d;transition:transform .15s ease,box-shadow .3s,border-color .3s;
-    animation:cardIn .4s ease both
-  }
-  .slot-card::before{content:'';position:absolute;inset:0;background:radial-gradient(circle at var(--mx,50%) var(--my,50%),rgba(212,255,0,.07) 0,transparent 65%);pointer-events:none;transition:opacity .3s;opacity:0;border-radius:18px}
-  .slot-card:hover::before{opacity:1}
-  .slot-card::after{content:'';position:absolute;top:0;left:0;right:0;height:2px;border-radius:18px 18px 0 0;background:var(--stripe-color,var(--accent));opacity:0;transition:opacity .3s}
-  .slot-card:hover::after,.slot-card.booked::after{opacity:1}
-  .slot-card.booked{border-color:rgba(212,255,0,.35);background:linear-gradient(135deg,var(--card) 0%,rgba(212,255,0,.05) 100%)}
-  .slot-card.full:not(.booked){border-color:rgba(255,68,68,.25);cursor:not-allowed}
-  .slot-card.full .slot-cta{opacity:.4;pointer-events:none}
-  @keyframes cardIn{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:translateY(0)}}
+/* ── SLOT GRID ── */
+.s-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px}
 
-  .slot-top{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:14px}
-  .slot-period-icon{font-size:26px;line-height:1}
-  .slot-status-pill{font-size:10px;font-weight:700;letter-spacing:.8px;padding:4px 10px;border-radius:20px;display:flex;align-items:center;gap:5px}
-  .sp-open{background:rgba(0,230,118,.12);color:var(--green)}
-  .sp-booked{background:rgba(212,255,0,.12);color:var(--accent)}
-  .sp-full{background:rgba(255,68,68,.12);color:var(--red)}
-  .sp-dot{width:5px;height:5px;border-radius:50%;background:currentColor;animation:blink 1.4s infinite}
-  @keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+/* ── SLOT CARD ── */
+.s-wrap{perspective:900px}
+.s-card{background:var(--card);border:1px solid var(--border);border-radius:18px;padding:22px;cursor:pointer;position:relative;overflow:hidden;transform-style:preserve-3d;transition:transform .12s ease,box-shadow .3s,border-color .3s;animation:cardIn .45s ease both}
+.s-card::before{content:'';position:absolute;inset:0;background:radial-gradient(circle at var(--mx,50%) var(--my,50%),rgba(212,255,0,.07) 0,transparent 65%);pointer-events:none;opacity:0;transition:opacity .3s;border-radius:18px}
+.s-card:hover::before{opacity:1}
+.s-card::after{content:'';position:absolute;top:0;left:0;right:0;height:2px;border-radius:18px 18px 0 0;background:var(--sc,var(--accent));opacity:0;transition:opacity .3s}
+.s-card:hover::after,.s-card.booked::after{opacity:1}
+.s-card.booked{border-color:rgba(212,255,0,.3);background:linear-gradient(135deg,var(--card) 0%,rgba(212,255,0,.04) 100%)}
+.s-card.full-card{border-color:rgba(255,68,68,.18);cursor:not-allowed}
+@keyframes cardIn{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
 
-  .slot-time{font-family:'Bebas Neue',sans-serif;font-size:28px;letter-spacing:1px;color:var(--text);line-height:1;margin-bottom:4px}
-  .slot-trainer{font-size:12px;color:var(--muted);margin-bottom:14px;display:flex;align-items:center;gap:5px}
-  .trainer-dot{width:6px;height:6px;border-radius:50%;background:var(--green);flex-shrink:0}
+.s-top{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:14px}
+.s-icon{font-size:26px;line-height:1}
+.s-pill{font-size:10px;font-weight:700;letter-spacing:.7px;padding:4px 11px;border-radius:20px;display:flex;align-items:center;gap:5px}
+.sp-open{background:rgba(0,230,118,.1);color:var(--green)}
+.sp-booked{background:rgba(212,255,0,.1);color:var(--accent)}
+.sp-full{background:rgba(255,68,68,.1);color:var(--red)}
+.sp-dot{width:5px;height:5px;border-radius:50%;background:currentColor;animation:blink 1.5s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.25}}
 
-  .slot-progress{margin-bottom:14px}
-  .sp-labels{display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-bottom:5px}
-  .sp-bar{height:4px;background:rgba(255,255,255,.06);border-radius:3px;overflow:hidden}
-  .sp-fill{height:100%;border-radius:3px;transition:width .6s cubic-bezier(.34,1.56,.64,1);background:linear-gradient(90deg,var(--accent),var(--green))}
-  .sp-fill.danger{background:linear-gradient(90deg,var(--yellow),var(--red))}
+.s-time{font-family:'Bebas Neue',sans-serif;font-size:30px;letter-spacing:1px;line-height:1;margin-bottom:5px}
+.s-trainer{font-size:12px;color:var(--muted);margin-bottom:14px;display:flex;align-items:center;gap:6px}
+.tr-dot{width:6px;height:6px;border-radius:50%;background:var(--green);flex-shrink:0}
+.s-ghint{font-size:10px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;padding:3px 9px;border-radius:20px;background:rgba(255,105,180,.08);color:var(--pink);display:inline-flex;align-items:center;gap:4px;margin-bottom:14px}
 
-  .slot-gender-hint{font-size:10px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;padding:3px 9px;border-radius:20px;background:rgba(255,105,180,.1);color:var(--pink);display:inline-flex;align-items:center;gap:4px;margin-bottom:14px}
+.s-prog{margin-bottom:16px}
+.sp-labs{display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-bottom:5px}
+.sp-bar{height:4px;background:rgba(255,255,255,.05);border-radius:3px;overflow:hidden}
+.sp-fill{height:100%;border-radius:3px;transition:width .7s cubic-bezier(.34,1.56,.64,1);background:linear-gradient(90deg,var(--accent),var(--green))}
+.sp-fill.hot{background:linear-gradient(90deg,var(--yellow),var(--red))}
 
-  .slot-cta{display:flex;align-items:center;justify-content:center;gap:8px;padding:10px;border-radius:10px;border:none;width:100%;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:700;cursor:pointer;transition:all .2s;letter-spacing:.3px}
-  .cta-book{background:rgba(212,255,0,.1);color:var(--accent);border:1px solid rgba(212,255,0,.25)}
-  .cta-book:hover{background:var(--accent);color:#000;box-shadow:0 0 20px rgba(212,255,0,.3)}
-  .cta-unbook{background:rgba(255,68,68,.08);color:var(--red);border:1px solid rgba(255,68,68,.2)}
-  .cta-unbook:hover{background:var(--red);color:#fff}
+/* ── ENROLLED CHIPS ── */
+.enrolled-row{display:flex;align-items:center;flex-wrap:wrap;gap:4px;margin-bottom:14px;min-height:24px}
+.e-chip{background:rgba(255,255,255,.04);border:1px solid var(--border2);border-radius:20px;padding:2px 10px;font-size:10px;font-weight:600;color:var(--muted);display:flex;align-items:center;gap:5px;transition:all .2s}
+.e-chip:hover{border-color:var(--accent);color:var(--accent)}
+.e-av{width:16px;height:16px;border-radius:50%;background:rgba(212,255,0,.12);color:var(--accent);display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:700}
 
-  /* ── ENROLLED AVATARS ── */
-  .enrolled-row{display:flex;align-items:center;gap:-6px;margin-bottom:12px;flex-wrap:wrap;gap:4px}
-  .e-av{width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;border:1.5px solid var(--card);background:rgba(77,159,255,.18);color:var(--blue);flex-shrink:0;transition:transform .2s}
-  .e-av:hover{transform:scale(1.2);z-index:2}
-  .e-more{font-size:10px;color:var(--muted);font-weight:600;margin-left:4px}
+.s-cta{display:flex;align-items:center;justify-content:center;gap:8px;padding:10px 16px;border-radius:10px;border:none;width:100%;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:700;cursor:pointer;transition:all .22s;letter-spacing:.3px}
+.cta-bk{background:rgba(212,255,0,.09);color:var(--accent);border:1px solid rgba(212,255,0,.2)}
+.cta-bk:hover{background:var(--accent);color:#000;box-shadow:0 0 22px rgba(212,255,0,.28)}
+.cta-ub{background:rgba(255,68,68,.07);color:var(--red);border:1px solid rgba(255,68,68,.18)}
+.cta-ub:hover{background:var(--red);color:#fff;box-shadow:0 0 18px rgba(255,68,68,.25)}
+.cta-dis{background:rgba(255,255,255,.03);color:var(--muted2);border:1px solid var(--border);cursor:not-allowed}
 
-  /* ── ADMIN PANEL ── */
-  .admin-section{margin-bottom:32px}
-  .admin-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px}
-  .admin-title{font-family:'Bebas Neue',sans-serif;font-size:24px;letter-spacing:1px}
-  .admin-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px}
-  .admin-slot-card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:18px;transition:border-color .2s}
-  .admin-slot-card:hover{border-color:rgba(212,255,0,.3)}
-  .asc-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
-  .asc-time{font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:1px;color:var(--accent)}
-  .asc-trainer{font-size:12px;color:var(--muted);margin-bottom:10px;display:flex;align-items:center;gap:5px}
-  .client-list{display:flex;flex-direction:column;gap:6px;max-height:160px;overflow-y:auto}
-  .client-list::-webkit-scrollbar{width:3px}
-  .client-list::-webkit-scrollbar-thumb{background:var(--border)}
-  .client-row{display:flex;align-items:center;gap:8px;padding:7px 10px;background:rgba(255,255,255,.03);border-radius:8px;border:1px solid rgba(255,255,255,.05)}
-  .cr-av{width:26px;height:26px;border-radius:50%;background:rgba(212,255,0,.1);color:var(--accent);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;flex-shrink:0}
-  .cr-name{font-size:12px;font-weight:600;flex:1}
-  .cr-plan{font-size:10px;color:var(--muted)}
-  .empty-clients{text-align:center;padding:20px;color:var(--muted);font-size:12px}
+/* ── ADMIN VIEW ── */
+.admin-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(310px,1fr));gap:16px}
+.ad-card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:20px;transition:border-color .2s}
+.ad-card:hover{border-color:var(--border2)}
+.ad-head{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:10px}
+.ad-time{font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:1px;color:var(--accent)}
+.ad-cnt{font-family:'Bebas Neue',sans-serif;font-size:28px;line-height:1}
+.ad-trainer{font-size:11px;color:var(--muted);margin-bottom:10px;display:flex;align-items:center;gap:5px}
+.cl-list{display:flex;flex-direction:column;gap:6px;max-height:200px;overflow-y:auto}
+.cl-list::-webkit-scrollbar{width:3px}
+.cl-list::-webkit-scrollbar-thumb{background:var(--border2)}
+.cl-row{display:flex;align-items:center;gap:8px;padding:8px 10px;background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.04);border-radius:9px;transition:border-color .2s}
+.cl-row:hover{border-color:rgba(212,255,0,.15)}
+.cl-av{width:28px;height:28px;border-radius:50%;background:rgba(212,255,0,.08);color:var(--accent);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;flex-shrink:0}
+.cl-name{font-size:12px;font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cl-plan{font-size:10px;color:var(--muted)}
+.rm-btn{background:rgba(255,68,68,.08);border:1px solid rgba(255,68,68,.15);border-radius:6px;padding:4px 9px;color:var(--red);font-size:11px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;transition:all .2s;flex-shrink:0}
+.rm-btn:hover{background:var(--red);color:#fff}
+.no-clients{text-align:center;padding:18px;color:var(--muted2);font-size:12px}
 
-  /* ── TOAST ── */
-  #toasts{position:fixed;bottom:24px;right:24px;z-index:9999;display:flex;flex-direction:column;gap:8px}
-  .toast{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px 16px;min-width:240px;max-width:320px;display:flex;align-items:center;gap:10px;font-size:13px;animation:tIn .3s ease;box-shadow:0 8px 32px rgba(0,0,0,.5)}
-  .toast-ok{border-left:3px solid var(--green)}
-  .toast-err{border-left:3px solid var(--red)}
-  .toast-info{border-left:3px solid var(--blue)}
-  @keyframes tIn{from{transform:translateX(100%);opacity:0}to{transform:translateX(0);opacity:1}}
+/* ── ACCESS DENIED ── */
+.access-denied{text-align:center;padding:80px 20px}
+.ad-ico{font-size:52px;margin-bottom:16px;opacity:.4}
+.ad-title{font-family:'Bebas Neue',sans-serif;font-size:28px;letter-spacing:1px;margin-bottom:8px;color:var(--muted)}
+.ad-desc{font-size:13px;color:var(--muted2);max-width:340px;margin:0 auto}
 
-  /* ── STAT CARDS ── */
-  .stats-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:28px}
-  .stat-card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;text-align:center;position:relative;overflow:hidden;transition:transform .2s}
-  .stat-card:hover{transform:translateY(-2px)}
-  .stat-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px}
-  .sc-acc::before{background:var(--accent)}.sc-grn::before{background:var(--green)}.sc-red::before{background:var(--red)}.sc-blu::before{background:var(--blue)}
-  .stat-val{font-family:'Bebas Neue',sans-serif;font-size:36px;letter-spacing:1px;line-height:1}
-  .stat-lbl{font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-top:4px}
+/* ── TOAST ── */
+#toasts{position:fixed;bottom:22px;right:22px;z-index:9999;display:flex;flex-direction:column;gap:7px}
+.toast{background:var(--card);border:1px solid var(--border2);border-radius:12px;padding:12px 16px;min-width:230px;max-width:320px;display:flex;align-items:center;gap:10px;font-size:13px;animation:tIn .28s ease;box-shadow:0 10px 40px rgba(0,0,0,.6)}
+.t-ok{border-left:3px solid var(--green)}.t-err{border-left:3px solid var(--red)}.t-info{border-left:3px solid var(--blue)}
+@keyframes tIn{from{transform:translateX(110%);opacity:0}to{transform:translateX(0);opacity:1}}
 
-  /* ── RESPONSIVE ── */
-  @media(max-width:640px){
-    .topbar{padding:0 14px}
-    .main-body{padding:20px 14px}
-    .hero-title{font-size:36px}
-    .slots-grid{grid-template-columns:1fr}
-  }
+/* ── SECTION LABEL ── */
+.sec-lbl{font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:14px;display:flex;align-items:center;gap:10px}
+.sec-lbl::after{content:'';flex:1;height:1px;background:var(--border)}
+
+/* ── SPINNER ── */
+.spin{display:inline-block;width:18px;height:18px;border:2px solid var(--border2);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+@media(max-width:600px){
+  .topbar{padding:0 14px}
+  .inner{padding:18px 14px 36px}
+  .stats-row{grid-template-columns:repeat(2,1fr)}
+  .s-grid,.admin-grid{grid-template-columns:1fr}
+  .hero-h{font-size:36px}
+  .u-nm,.tb-title{display:none}
+}
 </style>
 </head>
 <body>
+<canvas id="bg-c"></canvas>
 
-<canvas id="bg-canvas"></canvas>
-
+<!-- LOADER -->
 <div id="loader">
-  <div class="ld-ring"></div>
-  <div class="ld-text">GYM AT YOUR HOME</div>
+  <div class="ld-logo-wrap">
+    <div class="ld-glow"></div>
+    <img src="logo.png" class="ld-logo-img" onerror="this.style.display='none'">
+  </div>
+  <div class="ld-brand">GYM AT YOUR HOME</div>
+  <div class="ld-sub">Slot Booking Portal</div>
+  <div class="ld-bar"><div class="ld-fill"></div></div>
 </div>
 
+<!-- AUTH -->
 <div id="auth-gate">
   <div class="auth-card">
-    <div class="logo-text">GYM AT YOUR HOME</div>
-    <p>Sign in to book your training slot</p>
-    <div class="auth-err" id="auth-err"></div>
-    <input class="fi" id="li-email" type="email" placeholder="Email address">
-    <input class="fi" id="li-pwd" type="password" placeholder="Password" onkeydown="if(event.key==='Enter')doSignIn()">
-    <select class="role-sel" id="li-role">
-      <option value="">— Select your role —</option>
-      <option value="client">Client</option>
-      <option value="admin">Admin</option>
-      <option value="coordinatorhead">Coordinator Head</option>
-      <option value="coordinator">Coordinator</option>
-    </select>
-    <div id="auth-load" style="color:var(--muted);font-size:12px;margin-bottom:10px;min-height:16px"></div>
-    <button class="btn-primary" onclick="doSignIn()">Sign In →</button>
+    <div class="auth-logo">
+      <img src="logo.png" class="auth-logo-img" onerror="this.style.display='none'">
+      <div>
+        <div class="auth-logo-text">GYM AT YOUR HOME</div>
+        <div class="auth-logo-sub">Slot Booking Portal</div>
+      </div>
+    </div>
+    <div class="auth-h">SIGN IN</div>
+    <div class="auth-p">Enter your registered credentials to book slots</div>
+    <div class="auth-err" id="ae"></div>
+    <input class="fi" id="li-email" type="email" placeholder="Email address" autocomplete="email">
+    <input class="fi" id="li-pwd" type="password" placeholder="Password" autocomplete="current-password" onkeydown="if(event.key==='Enter')doSignIn()">
+    <button class="btn-signin" id="sign-btn" onclick="doSignIn()">
+      <span id="sign-lbl">Sign In →</span>
+    </button>
+    <div class="access-note">🔒 Only registered clients & admins can access this portal. Contact your coordinator if you don't have an account.</div>
   </div>
 </div>
 
+<!-- APP -->
 <div id="app">
   <div class="topbar">
-    <div class="tb-brand">GYH</div>
+    <div class="tb-logo">
+      <img src="logo.png" class="tb-logo-img" onerror="this.style.display='none'">
+      <div class="tb-brand">GYH</div>
+    </div>
     <div class="tb-sep"></div>
-    <div class="tb-title">Slot Booking</div>
-    <div class="tb-user">
-      <div class="user-pill">
-        <div class="user-av" id="u-av">?</div>
-        <div class="user-name" id="u-name">—</div>
+    <div class="tb-title">SLOT BOOKING</div>
+    <div class="tb-right">
+      <div class="user-chip">
+        <div class="u-av" id="u-av">?</div>
+        <div class="u-nm" id="u-nm">—</div>
       </div>
-      <div class="role-badge" id="u-role-badge"></div>
+      <div class="role-pill" id="u-rp"></div>
       <button class="btn-out" onclick="doSignOut()">Sign Out</button>
     </div>
   </div>
-  <div class="main-body" id="main-body">
-    <div style="text-align:center;padding:80px;color:var(--muted)">Loading slots…</div>
+  <div class="body-scroll">
+    <div class="inner" id="main">
+      <div style="text-align:center;padding:80px;color:var(--muted)"><div class="spin" style="width:32px;height:32px;margin:0 auto 16px"></div>Loading…</div>
+    </div>
   </div>
 </div>
 
 <div id="toasts"></div>
 
 <script>
-// ══ BACKGROUND PARTICLE SYSTEM ══
-const canvas = document.getElementById('bg-canvas');
-const ctx = canvas.getContext('2d');
-let W, H, pts = [], animId;
-
-function resize() {
-  W = canvas.width  = window.innerWidth;
-  H = canvas.height = window.innerHeight;
-}
-resize();
-window.addEventListener('resize', resize);
-
-for (let i = 0; i < 60; i++) pts.push({
-  x: Math.random() * W, y: Math.random() * H,
-  vx: (Math.random() - .5) * .3, vy: (Math.random() - .5) * .3,
-  r: Math.random() * 1.4 + .3,
-  a: Math.random()
-});
-
-function drawBg() {
-  ctx.clearRect(0, 0, W, H);
-  pts.forEach(p => {
-    p.x += p.vx; p.y += p.vy; p.a += .004;
-    if (p.x < 0) p.x = W; if (p.x > W) p.x = 0;
-    if (p.y < 0) p.y = H; if (p.y > H) p.y = 0;
-    const alpha = (.3 + .2 * Math.sin(p.a));
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-    ctx.fillStyle = `rgba(212,255,0,${alpha})`;
-    ctx.fill();
+'use strict';
+// ── PARTICLE BG ──
+const C = document.getElementById('bg-c');
+const X = C.getContext('2d');
+let W, H;
+const pts = [];
+function resize(){ W = C.width = innerWidth; H = C.height = innerHeight; }
+resize(); window.addEventListener('resize', resize);
+for(let i=0;i<55;i++) pts.push({ x:Math.random()*W, y:Math.random()*H, vx:(Math.random()-.5)*.25, vy:(Math.random()-.5)*.25, r:Math.random()*1.2+.3, a:Math.random()*Math.PI*2 });
+(function loop(){
+  X.clearRect(0,0,W,H);
+  pts.forEach(p=>{
+    p.x+=p.vx; p.y+=p.vy; p.a+=.005;
+    if(p.x<0)p.x=W; if(p.x>W)p.x=0; if(p.y<0)p.y=H; if(p.y>H)p.y=0;
+    X.beginPath(); X.arc(p.x,p.y,p.r,0,Math.PI*2);
+    X.fillStyle=`rgba(212,255,0,${.18+.1*Math.sin(p.a)})`; X.fill();
   });
-  // mesh lines
-  for (let i = 0; i < pts.length; i++) {
-    for (let j = i + 1; j < pts.length; j++) {
-      const dx = pts[i].x - pts[j].x, dy = pts[i].y - pts[j].y;
-      const d = Math.sqrt(dx*dx + dy*dy);
-      if (d < 110) {
-        ctx.beginPath();
-        ctx.moveTo(pts[i].x, pts[i].y);
-        ctx.lineTo(pts[j].x, pts[j].y);
-        ctx.strokeStyle = `rgba(212,255,0,${(1 - d/110) * .07})`;
-        ctx.lineWidth = .5;
-        ctx.stroke();
-      }
-    }
+  for(let i=0;i<pts.length;i++) for(let j=i+1;j<pts.length;j++){
+    const dx=pts[i].x-pts[j].x, dy=pts[i].y-pts[j].y, d=Math.sqrt(dx*dx+dy*dy);
+    if(d<100){ X.beginPath(); X.moveTo(pts[i].x,pts[i].y); X.lineTo(pts[j].x,pts[j].y); X.strokeStyle=`rgba(212,255,0,${(1-d/100)*.06})`; X.lineWidth=.4; X.stroke(); }
   }
-  animId = requestAnimationFrame(drawBg);
-}
-drawBg();
+  requestAnimationFrame(loop);
+})();
 
-// ══ 3D CARD TILT ══
+// ── 3D TILT ──
 document.addEventListener('mousemove', e => {
-  document.querySelectorAll('.slot-card').forEach(card => {
+  document.querySelectorAll('.s-card').forEach(card => {
     const r = card.getBoundingClientRect();
-    const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
-    const dx = e.clientX - cx, dy = e.clientY - cy;
-    const d = Math.sqrt(dx*dx + dy*dy);
-    if (d < 280) {
-      const rx = -(dy / r.height) * 10;
-      const ry = (dx / r.width) * 10;
-      card.style.transform = `rotateX(${rx}deg) rotateY(${ry}deg) translateZ(6px)`;
-      card.style.boxShadow = `0 ${12 + Math.abs(rx)}px 40px rgba(0,0,0,.5), 0 0 ${20 + d*.05}px rgba(212,255,0,.04)`;
-      const mx = ((e.clientX - r.left) / r.width * 100).toFixed(1);
-      const my = ((e.clientY - r.top) / r.height * 100).toFixed(1);
-      card.style.setProperty('--mx', mx + '%');
-      card.style.setProperty('--my', my + '%');
-    } else {
-      card.style.transform = '';
-      card.style.boxShadow = '';
-    }
+    const cx=r.left+r.width/2, cy=r.top+r.height/2;
+    const dx=e.clientX-cx, dy=e.clientY-cy, dist=Math.sqrt(dx*dx+dy*dy);
+    if(dist < 300){
+      const rx=-(dy/r.height)*10, ry=(dx/r.width)*10;
+      card.style.transform=`rotateX(${rx}deg) rotateY(${ry}deg) translateZ(4px)`;
+      card.style.boxShadow=`0 ${14+Math.abs(rx)}px 44px rgba(0,0,0,.55)`;
+      card.style.setProperty('--mx',((e.clientX-r.left)/r.width*100).toFixed(1)+'%');
+      card.style.setProperty('--my',((e.clientY-r.top)/r.height*100).toFixed(1)+'%');
+    } else { card.style.transform=''; card.style.boxShadow=''; }
   });
 });
 
-// ══ TOAST ══
-function toast(msg, type='info') {
-  const t = document.createElement('div');
-  t.className = `toast toast-${type==='success'?'ok':type==='error'?'err':'info'}`;
-  t.innerHTML = `<span>${type==='success'?'✅':type==='error'?'❌':'ℹ️'}</span><span>${msg}</span>`;
+// ── TOAST ──
+function toast(msg, type='info'){
+  const t=document.createElement('div');
+  t.className=`toast t-${type==='success'?'ok':type==='error'?'err':'info'}`;
+  t.innerHTML=`<span>${type==='success'?'✅':type==='error'?'❌':'ℹ️'}</span><span>${msg}</span>`;
   document.getElementById('toasts').appendChild(t);
-  setTimeout(() => t.remove(), 4000);
+  setTimeout(()=>t.remove(),4200);
 }
 
-// ══ STATE ══
-let currentUser = null;
-let currentRole = null;
-let currentUserDoc = null;
-let slotsUnsub = null;
-let currentPeriod = 'morning';
+// ── STATE ──
+let CU=null, CR=null, CDoc=null, sUnsub=null, period='morning';
 
-const FIXED_SLOTS = [
-  { id:'s1', time:'6:00 – 7:00 AM',  period:'morning', genderHint:'' },
-  { id:'s2', time:'7:00 – 8:00 AM',  period:'morning', genderHint:'Female Trainer' },
-  { id:'s3', time:'8:00 – 9:00 AM',  period:'morning', genderHint:'' },
-  { id:'s4', time:'9:00 – 10:00 AM', period:'morning', genderHint:'Female Trainer' },
-  { id:'s5', time:'4:30 – 5:30 PM',  period:'evening', genderHint:'Female Trainer' },
-  { id:'s6', time:'5:30 – 6:30 PM',  period:'evening', genderHint:'' },
-  { id:'s7', time:'6:30 – 7:30 PM',  period:'evening', genderHint:'Female Trainer' },
-  { id:'s8', time:'7:30 – 8:30 PM',  period:'evening', genderHint:'' }
+const SLOTS=[
+  {id:'s1',time:'6:00 – 7:00 AM',  period:'morning',gh:''},
+  {id:'s2',time:'7:00 – 8:00 AM',  period:'morning',gh:'Female Trainer'},
+  {id:'s3',time:'8:00 – 9:00 AM',  period:'morning',gh:''},
+  {id:'s4',time:'9:00 – 10:00 AM', period:'morning',gh:'Female Trainer'},
+  {id:'s5',time:'4:30 – 5:30 PM',  period:'evening',gh:'Female Trainer'},
+  {id:'s6',time:'5:30 – 6:30 PM',  period:'evening',gh:''},
+  {id:'s7',time:'6:30 – 7:30 PM',  period:'evening',gh:'Female Trainer'},
+  {id:'s8',time:'7:30 – 8:30 PM',  period:'evening',gh:''}
 ];
+const COLORS={s1:'#d4ff00',s2:'#00e676',s3:'#4d9fff',s4:'#aa66ff',s5:'#ff69b4',s6:'#ffbb00',s7:'#ff8c00',s8:'#ff4444'};
 
-const SLOT_COLORS = ['s1','s2','s3','s4','s5','s6','s7','s8'].reduce((o,id,i) => {
-  o[id] = ['#d4ff00','#00e676','#4d9fff','#aa66ff','#ff69b4','#ffbb00','#ff8c00','#ff4444'][i];
-  return o;
-}, {});
-
-// ══ AUTH ══
-function doSignIn() {
-  if (!window._FB?.ready) { showAuthErr('Firebase not ready. Please wait.'); return; }
-  const email = document.getElementById('li-email').value.trim();
-  const pwd   = document.getElementById('li-pwd').value;
-  const role  = document.getElementById('li-role').value;
-  const ld    = document.getElementById('auth-load');
-  clearAuthErr();
-  if (!email || !pwd || !role) { showAuthErr('Please fill all fields.'); return; }
-  ld.textContent = 'Signing in…';
-
-  const { auth, getDoc: gd, doc: d, db } = window._FB;
-  import("https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js").then(({ signInWithEmailAndPassword }) => {
-    signInWithEmailAndPassword(auth, email, pwd)
-      .then(async cred => {
-        const uid = cred.user.uid;
-        const snap = await window._FB.getDoc(window._FB.doc(window._FB.db, 'users', uid));
-        if (snap.exists() && snap.data().role !== role) {
-          await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js").then(m => m.signOut(auth));
-          showAuthErr(`Wrong role. Your role is "${snap.data().role}".`);
-          ld.textContent = '';
-          return;
-        }
-        currentRole = role;
-        ld.textContent = '';
-      })
-      .catch(e => {
-        const m = e.message || '';
-        showAuthErr(m.includes('invalid-credential') || m.includes('wrong-password') ? 'Wrong email or password.' :
-          m.includes('user-not-found') ? 'No account found.' : 'Sign in failed.');
-        ld.textContent = '';
-      });
-  });
-}
-
-function doSignOut() {
-  import("https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js").then(({ signOut }) => {
-    signOut(window._FB.auth).then(() => {
-      document.getElementById('app').classList.remove('visible');
-      document.getElementById('auth-gate').classList.remove('hidden');
-      currentUser = null; currentRole = null; currentUserDoc = null;
-    });
-  });
-}
-
-function showAuthErr(msg) { document.getElementById('auth-err').textContent = msg; }
-function clearAuthErr()   { document.getElementById('auth-err').textContent = ''; }
-
-// ══ FIREBASE READY ══
-document.addEventListener('fbReady', () => {
-  window._FB.onAuthStateChanged(window._FB.auth, async user => {
-    setTimeout(() => {
-      document.getElementById('loader').classList.add('out');
-    }, 1200);
-    if (user) {
-      currentUser = user;
-      const snap = await window._FB.getDoc(window._FB.doc(window._FB.db, 'users', user.uid));
-      if (snap.exists()) {
-        currentUserDoc = { id: snap.id, ...snap.data() };
-        if (!currentRole) currentRole = currentUserDoc.role;
+// ── SIGN IN ──
+async function doSignIn(){
+  const f=window._gyh;
+  if(!f){ showErr('Firebase not ready.'); return; }
+  const email=document.getElementById('li-email').value.trim();
+  const pwd=document.getElementById('li-pwd').value;
+  const btn=document.getElementById('sign-btn');
+  const lbl=document.getElementById('sign-lbl');
+  clearErr();
+  if(!email||!pwd){ showErr('Please enter email and password.'); return; }
+  btn.disabled=true; lbl.textContent='Signing in…';
+  try{
+    const cred = await f.signInWithEmailAndPassword(f.auth, email, pwd);
+    const uid  = cred.user.uid;
+    // Check users collection
+    const uSnap = await f.getDoc(f.doc(f.db,'users',uid));
+    if(!uSnap.exists()){ await f.signOut(f.auth); showErr('Account not found in system.'); btn.disabled=false; lbl.textContent='Sign In →'; return; }
+    const uData = uSnap.data();
+    const role  = uData.role || '';
+    // Only allow client, admin, coordinatorhead, coordinator
+    const allowed = ['client','admin','coordinatorhead','coordinator'];
+    if(!allowed.includes(role)){ await f.signOut(f.auth); showErr(`Role "${role}" cannot access this portal.`); btn.disabled=false; lbl.textContent='Sign In →'; return; }
+    // If client, verify they exist in clients collection
+    if(role === 'client'){
+      const cSnap = await f.getDoc(f.doc(f.db,'clients',uid));
+      // Also try by email
+      if(!cSnap.exists()){
+        const q = f.query(f.collection(f.db,'clients'), f.where('email','==',email));
+        const qSnap = await f.getDocs(q);
+        if(qSnap.empty){ await f.signOut(f.auth); showErr('You are not registered as a client. Contact your coordinator.'); btn.disabled=false; lbl.textContent='Sign In →'; return; }
       }
-      document.getElementById('auth-gate').classList.add('hidden');
-      document.getElementById('app').classList.add('visible');
+    }
+    CR = role; CDoc = uData;
+    // onAuthStateChanged will handle the rest
+  } catch(e){
+    const m=e.message||'';
+    showErr(m.includes('invalid-credential')||m.includes('wrong-password')?'Wrong email or password.':m.includes('user-not-found')?'No account found.':m.includes('invalid-email')?'Invalid email.':'Sign in failed. Try again.');
+    btn.disabled=false; lbl.textContent='Sign In →';
+  }
+}
+
+function showErr(msg){ document.getElementById('ae').textContent=msg; }
+function clearErr(){ document.getElementById('ae').textContent=''; }
+
+async function doSignOut(){
+  if(sUnsub){ sUnsub(); sUnsub=null; }
+  await window._gyh.signOut(window._gyh.auth);
+  CU=null; CR=null; CDoc=null;
+  document.getElementById('app').classList.remove('on');
+  document.getElementById('auth-gate').classList.remove('out');
+  document.getElementById('li-pwd').value='';
+  document.getElementById('sign-btn').disabled=false;
+  document.getElementById('sign-lbl').textContent='Sign In →';
+  toast('Signed out','info');
+}
+
+// ── FIREBASE READY ──
+document.addEventListener('fbReady', ()=>{
+  window._gyh.onAuthStateChanged(window._gyh.auth, async user => {
+    setTimeout(()=> document.getElementById('loader').classList.add('out'), 1400);
+    if(user){
+      CU = user;
+      if(!CR || !CDoc){
+        const snap = await window._gyh.getDoc(window._gyh.doc(window._gyh.db,'users',user.uid));
+        if(snap.exists()){ CDoc=snap.data(); CR=CDoc.role; }
+      }
       renderTopbar();
-      startListening();
+      document.getElementById('auth-gate').classList.add('out');
+      document.getElementById('app').classList.add('on');
+      startListen();
     } else {
-      document.getElementById('auth-gate').classList.remove('hidden');
-      document.getElementById('app').classList.remove('visible');
+      document.getElementById('auth-gate').classList.remove('out');
+      document.getElementById('app').classList.remove('on');
     }
   });
 });
 
-function renderTopbar() {
-  const name = currentUserDoc?.name || currentUser?.email || '?';
-  const ini  = name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
-  const roleMap = { admin:'Admin', client:'Client', coordinator:'Coordinator', coordinatorhead:'Coord. Head' };
-  const roleColors = { admin:'rb-admin', client:'rb-client', coordinator:'rb-admin', coordinatorhead:'rb-admin' };
-  document.getElementById('u-av').textContent = ini;
-  document.getElementById('u-name').textContent = name.split(' ')[0];
-  const badge = document.getElementById('u-role-badge');
-  badge.textContent = roleMap[currentRole] || currentRole;
-  badge.className = `role-badge ${roleColors[currentRole] || 'rb-client'}`;
+function renderTopbar(){
+  const name = CDoc?.name || CU?.email || '?';
+  const ini  = name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
+  const roleMap={client:'Client',admin:'Admin',coordinator:'Coordinator',coordinatorhead:'Coord. Head'};
+  const rCls ={client:'rp-client',admin:'rp-admin',coordinator:'rp-coord',coordinatorhead:'rp-admin'};
+  document.getElementById('u-av').textContent=ini;
+  document.getElementById('u-nm').textContent=name.split(' ')[0];
+  const rp=document.getElementById('u-rp');
+  rp.textContent=roleMap[CR]||CR; rp.className='role-pill '+(rCls[CR]||'rp-client');
 }
 
-// ══ LISTEN SLOTS ══
-function startListening() {
-  if (slotsUnsub) slotsUnsub();
-  const { db, collection, onSnapshot } = window._FB;
-  const q = collection(db, 'slots');
-  slotsUnsub = onSnapshot(q, snap => {
-    const docs = {};
-    snap.forEach(d => { docs[d.id] = { id: d.id, ...d.data() }; });
+// ── LISTEN TO SLOTS ──
+function startListen(){
+  if(sUnsub){ sUnsub(); sUnsub=null; }
+  const {db,collection,onSnapshot}=window._gyh;
+  sUnsub = onSnapshot(collection(db,'slots'), snap=>{
+    const docs={};
+    snap.forEach(d=>{ docs[d.id]={id:d.id,...d.data()}; });
     renderPage(docs);
-  }, err => {
-    renderPage({});
-    toast('Could not load slots: ' + err.message, 'error');
-  });
+  }, err=>{ toast('Slot load error: '+err.message,'error'); });
 }
 
-// ══ RENDER PAGE ══
-function renderPage(slotDocs) {
-  const isAdmin = currentRole === 'admin' || currentRole === 'coordinatorhead' || currentRole === 'coordinator';
-  const myUid = currentUser?.uid;
-  const totalSlots = FIXED_SLOTS.length;
-  const bookedByMe = FIXED_SLOTS.filter(s => (slotDocs[s.id]?.enrolledClients || []).includes(myUid)).length;
-  const totalEnrolled = FIXED_SLOTS.reduce((sum, s) => sum + (slotDocs[s.id]?.enrolledCount || 0), 0);
-  const fullSlots = FIXED_SLOTS.filter(s => {
-    const d = slotDocs[s.id] || {};
-    return (d.enrolledCount || 0) >= (d.maxCapacity || 10);
-  }).length;
+// ── RENDER ──
+function renderPage(sd){
+  const isAdmin = ['admin','coordinatorhead','coordinator'].includes(CR);
+  const myUid   = CU?.uid;
+  const all=SLOTS;
+  const shown   = period==='all' ? all : all.filter(s=>s.period===period);
 
-  const filtered = FIXED_SLOTS.filter(s => s.period === currentPeriod);
+  const totalEnrolled=all.reduce((s,sl)=>{const d=sd[sl.id]||{}; return s+(d.enrolledCount||0);},0);
+  const myBooked=all.filter(sl=>(sd[sl.id]?.enrolledClients||[]).includes(myUid)).length;
+  const full=all.filter(sl=>{ const d=sd[sl.id]||{}; return (d.enrolledCount||0)>=(d.maxCapacity||10); }).length;
+  const avail=all.length-full;
 
-  let html = `
+  let html=`
   <div class="hero">
-    <div class="hero-eyebrow">Schedule Your Training</div>
-    <div class="hero-title">${isAdmin ? 'ADMIN BOOKING VIEW' : 'BOOK YOUR SLOT'}</div>
-    <div class="hero-sub">${isAdmin ? 'Monitor all enrollments across every time slot.' : 'Choose your preferred training time. Spots fill fast!'}</div>
+    <div class="hero-eye">${isAdmin?'Admin Overview':'Your Training Schedule'}</div>
+    <div class="hero-h">${isAdmin?'ALL SLOT BOOKINGS':'BOOK YOUR SLOT'}</div>
+    <div class="hero-sub">${isAdmin?'Real-time view of every enrolled client across all time slots.':'Pick your preferred training time. Limited spots available daily!'}</div>
   </div>
-
   <div class="stats-row">
-    <div class="stat-card sc-acc">
-      <div class="stat-val">${totalSlots}</div>
-      <div class="stat-lbl">Total Slots</div>
-    </div>
-    <div class="stat-card sc-grn">
-      <div class="stat-val">${isAdmin ? totalEnrolled : bookedByMe}</div>
-      <div class="stat-lbl">${isAdmin ? 'Total Enrolled' : 'My Bookings'}</div>
-    </div>
-    <div class="stat-card sc-red">
-      <div class="stat-val">${fullSlots}</div>
-      <div class="stat-lbl">Slots Full</div>
-    </div>
-    <div class="stat-card sc-blu">
-      <div class="stat-val">${totalSlots - fullSlots}</div>
-      <div class="stat-lbl">Available</div>
-    </div>
+    <div class="st-card st-a"><div class="st-val">${all.length}</div><div class="st-lbl">Total Slots</div></div>
+    <div class="st-card st-g"><div class="st-val">${isAdmin?totalEnrolled:myBooked}</div><div class="st-lbl">${isAdmin?'Total Enrolled':'My Bookings'}</div></div>
+    <div class="st-card st-r"><div class="st-val">${full}</div><div class="st-lbl">Slots Full</div></div>
+    <div class="st-card st-b"><div class="st-val">${avail}</div><div class="st-lbl">Available</div></div>
   </div>
-
-  <div class="period-tabs">
-    <div class="ptab ${currentPeriod==='morning'?'active':''}" onclick="switchPeriod('morning')">
-      🌅 Morning
-    </div>
-    <div class="ptab ${currentPeriod==='evening'?'active':''}" onclick="switchPeriod('evening')">
-      🌇 Evening
-    </div>
-    <div class="ptab ${currentPeriod==='all'?'active':''}" onclick="switchPeriod('all')">
-      ⚡ All Slots
-    </div>
+  <div class="ptabs">
+    <div class="ptab ${period==='morning'?'on':''}" onclick="switchPeriod('morning')">🌅 Morning</div>
+    <div class="ptab ${period==='evening'?'on':''}" onclick="switchPeriod('evening')">🌇 Evening</div>
+    <div class="ptab ${period==='all'?'on':''}" onclick="switchPeriod('all')">⚡ All Slots</div>
   </div>`;
 
-  const slotsToShow = currentPeriod === 'all' ? FIXED_SLOTS : filtered;
-
-  if (isAdmin) {
-    html += renderAdminView(slotsToShow, slotDocs);
+  if(isAdmin){
+    html += renderAdmin(shown, sd);
   } else {
-    html += renderClientView(slotsToShow, slotDocs, myUid);
+    html += renderClient(shown, sd, myUid);
   }
 
-  document.getElementById('main-body').innerHTML = html;
+  document.getElementById('main').innerHTML = html;
+  // Load names for admin
+  if(isAdmin) shown.forEach(s=>{ const d=sd[s.id]||{}; (d.enrolledClients||[]).forEach(uid=>loadName(uid,s.id)); });
 }
 
-// ══ CLIENT VIEW ══
-function renderClientView(slots, slotDocs, myUid) {
-  let html = `<div class="slots-grid">`;
-  slots.forEach((s, i) => {
-    const d = slotDocs[s.id] || {};
-    const enrolled  = d.enrolledClients || [];
-    const cap       = d.maxCapacity || 10;
-    const count     = d.enrolledCount || enrolled.length;
-    const isFull    = count >= cap;
-    const isBooked  = enrolled.includes(myUid);
-    const pct       = Math.min((count / cap) * 100, 100);
-    const color     = SLOT_COLORS[s.id] || 'var(--accent)';
-    const icon      = s.period === 'morning' ? '🌅' : '🌇';
-    let statusHtml, ctaHtml;
+// ── CLIENT VIEW ──
+function renderClient(slots, sd, myUid){
+  if(!slots.length) return `<div class="access-denied"><div class="ad-ico">📭</div><div class="ad-title">No Slots</div><div class="ad-desc">No slots found for this period.</div></div>`;
+  let html=`<div class="s-grid">`;
+  slots.forEach((s,i)=>{
+    const d=sd[s.id]||{};
+    const enrolled = d.enrolledClients||[];
+    const cap      = d.maxCapacity||10;
+    const cnt      = Math.max(d.enrolledCount||0, enrolled.length);
+    const isFull   = cnt>=cap;
+    const isBooked = enrolled.includes(myUid);
+    const pct      = Math.min(cnt/cap*100,100);
+    const col      = COLORS[s.id]||'var(--accent)';
+    const icon     = s.period==='morning'?'🌅':'🌇';
 
-    if (isBooked) {
-      statusHtml = `<div class="slot-status-pill sp-booked"><div class="sp-dot"></div>Booked</div>`;
-      ctaHtml = `<button class="slot-cta cta-unbook" onclick="unbook('${s.id}','${s.time}')">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-        Unbook Session
-      </button>`;
-    } else if (isFull) {
-      statusHtml = `<div class="slot-status-pill sp-full"><div class="sp-dot"></div>Full</div>`;
-      ctaHtml = `<button class="slot-cta cta-book" disabled style="opacity:.35;cursor:not-allowed">Slot Full</button>`;
+    let pill, cta;
+    if(isBooked){
+      pill=`<div class="s-pill sp-booked"><div class="sp-dot"></div>Booked ✓</div>`;
+      cta=`<button class="s-cta cta-ub" onclick="doUnbook('${s.id}','${s.time}')">✕ Unbook This Slot</button>`;
+    } else if(isFull){
+      pill=`<div class="s-pill sp-full"><div class="sp-dot"></div>Slot Full</div>`;
+      cta=`<button class="s-cta cta-dis" disabled>Slot Full</button>`;
     } else {
-      statusHtml = `<div class="slot-status-pill sp-open"><div class="sp-dot"></div>Open</div>`;
-      ctaHtml = `<button class="slot-cta cta-book" onclick="book('${s.id}','${s.time}')">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
-        Book This Slot
-      </button>`;
+      pill=`<div class="s-pill sp-open"><div class="sp-dot"></div>Open</div>`;
+      cta=`<button class="s-cta cta-bk" onclick="doBook('${s.id}','${s.time}')">+ Book This Slot</button>`;
     }
 
-    html += `
-    <div class="slot-wrap">
-      <div class="slot-card ${isBooked?'booked':''} ${isFull&&!isBooked?'full':''}" style="--stripe-color:${color};animation-delay:${i*60}ms">
-        <div class="slot-top">
-          <div class="slot-period-icon">${icon}</div>
-          ${statusHtml}
+    // Enrolled chips (names loaded async)
+    const chips = enrolled.slice(0,4).map(uid=>`<div class="e-chip"><div class="e-av" id="eav-${uid}-${s.id}">${uid.slice(0,2).toUpperCase()}</div><span id="enm-${uid}-${s.id}">…</span></div>`).join('') + (enrolled.length>4?`<div class="e-chip">+${enrolled.length-4} more</div>`:'');
+
+    html+=`
+    <div class="s-wrap">
+      <div class="s-card ${isBooked?'booked':''} ${isFull&&!isBooked?'full-card':''}" style="--sc:${col};animation-delay:${i*55}ms">
+        <div class="s-top"><div class="s-icon">${icon}</div>${pill}</div>
+        <div class="s-time">${s.time}</div>
+        <div class="s-trainer"><div class="tr-dot"></div>${d.trainerName||'Trainer TBD'}${d.trainerGender?` · ${d.trainerGender}`:''}</div>
+        ${s.gh?`<div class="s-ghint">♀ ${s.gh}</div>`:''}
+        <div class="s-prog">
+          <div class="sp-labs"><span>${cnt} enrolled</span><span>${Math.max(cap-cnt,0)} spots left</span></div>
+          <div class="sp-bar"><div class="sp-fill ${pct>=75?'hot':''}" style="width:${pct}%"></div></div>
         </div>
-        <div class="slot-time">${s.time}</div>
-        <div class="slot-trainer">
-          <div class="trainer-dot"></div>
-          ${d.trainerName || 'Trainer TBD'}${d.trainerGender?` · ${d.trainerGender}`:''}
-        </div>
-        ${s.genderHint ? `<div class="slot-gender-hint">♀ ${s.genderHint}</div>` : ''}
-        <div class="slot-progress">
-          <div class="sp-labels">
-            <span>${count} enrolled</span>
-            <span>${cap - count} spots left</span>
-          </div>
-          <div class="sp-bar">
-            <div class="sp-fill ${pct >= 80 ? 'danger' : ''}" style="width:${pct}%"></div>
-          </div>
-        </div>
-        ${ctaHtml}
+        ${enrolled.length?`<div class="enrolled-row">${chips}</div>`:''}
+        ${cta}
       </div>
     </div>`;
+    // load enrolled names
+    enrolled.slice(0,4).forEach(uid=>loadNameChip(uid,s.id));
   });
-
-  html += '</div>';
+  html+='</div>';
   return html;
 }
 
-// ══ ADMIN VIEW ══
-function renderAdminView(slots, slotDocs) {
-  let html = `<div class="admin-grid">`;
-  slots.forEach(s => {
-    const d = slotDocs[s.id] || {};
-    const enrolled = d.enrolledClients || [];
-    const cap      = d.maxCapacity || 10;
-    const count    = d.enrolledCount || enrolled.length;
-    const pct      = Math.min((count / cap) * 100, 100);
-    const color    = SLOT_COLORS[s.id] || 'var(--accent)';
-    const icon     = s.period === 'morning' ? '🌅' : '🌇';
+// ── ADMIN VIEW ──
+function renderAdmin(slots, sd){
+  let html=`<div class="admin-grid">`;
+  slots.forEach(s=>{
+    const d=sd[s.id]||{};
+    const enrolled=d.enrolledClients||[];
+    const cap=d.maxCapacity||10;
+    const cnt=Math.max(d.enrolledCount||0,enrolled.length);
+    const pct=Math.min(cnt/cap*100,100);
+    const col=COLORS[s.id]||'var(--accent)';
+    const icon=s.period==='morning'?'🌅':'🌇';
 
-    html += `
-    <div class="admin-slot-card" style="border-top: 2px solid ${color}">
-      <div class="asc-head">
+    html+=`
+    <div class="ad-card" style="border-top:2px solid ${col}20;position:relative">
+      <div style="position:absolute;top:0;left:0;right:0;height:2px;background:${col};border-radius:16px 16px 0 0"></div>
+      <div class="ad-head">
         <div>
-          <div style="font-size:12px;color:var(--muted);margin-bottom:2px">${icon} ${s.period === 'morning' ? 'Morning' : 'Evening'}</div>
-          <div class="asc-time">${s.time}</div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:3px">${icon} ${s.period==='morning'?'Morning':'Evening'}</div>
+          <div class="ad-time">${s.time}</div>
         </div>
         <div style="text-align:right">
-          <div style="font-family:'Bebas Neue',sans-serif;font-size:24px;color:${color}">${count}<span style="font-size:14px;color:var(--muted)">/${cap}</span></div>
-          <div style="font-size:10px;color:var(--muted);letter-spacing:1px">ENROLLED</div>
+          <div class="ad-cnt" style="color:${col}">${cnt}<span style="font-size:14px;color:var(--muted)">/${cap}</span></div>
+          <div style="font-size:9px;color:var(--muted);letter-spacing:1px">ENROLLED</div>
         </div>
       </div>
-      <div class="asc-trainer">
-        <div class="trainer-dot"></div>
-        ${d.trainerName || 'No trainer assigned'}
-        ${d.trainerGender ? ` · ${d.trainerGender}` : ''}
-      </div>
-      <div style="margin-bottom:10px">
-        <div class="sp-bar">
-          <div class="sp-fill ${pct>=80?'danger':''}" style="width:${pct}%"></div>
-        </div>
-      </div>
-      <div class="client-list" id="cl-${s.id}">
-        ${enrolled.length === 0
-          ? `<div class="empty-clients">No bookings yet</div>`
-          : enrolled.map(uid => `
-            <div class="client-row" id="cr-${uid}-${s.id}">
-              <div class="cr-av">${uid.substring(0,2).toUpperCase()}</div>
-              <div style="flex:1"><div class="cr-name" id="cn-${uid}-${s.id}">Loading…</div></div>
-              <button onclick="adminUnbook('${s.id}','${uid}')" style="background:rgba(255,68,68,.1);border:1px solid rgba(255,68,68,.2);border-radius:6px;padding:3px 8px;color:var(--red);font-size:11px;cursor:pointer;font-weight:600">Remove</button>
-            </div>`).join('')}
+      <div class="ad-trainer"><div class="tr-dot"></div>${d.trainerName||'No trainer assigned'}${d.trainerGender?` · ${d.trainerGender}`:''}</div>
+      <div class="sp-bar" style="margin-bottom:12px"><div class="sp-fill ${pct>=75?'hot':''}" style="width:${pct}%"></div></div>
+      <div class="cl-list" id="cl-${s.id}">
+        ${enrolled.length===0
+          ?`<div class="no-clients">No bookings yet</div>`
+          :enrolled.map(uid=>`
+          <div class="cl-row" id="clr-${uid}-${s.id}">
+            <div class="cl-av" id="clav-${uid}-${s.id}">${uid.slice(0,2).toUpperCase()}</div>
+            <div style="flex:1;min-width:0">
+              <div class="cl-name" id="cln-${uid}-${s.id}">Loading…</div>
+              <div class="cl-plan" id="clp-${uid}-${s.id}"></div>
+            </div>
+            <button class="rm-btn" onclick="adminRemove('${s.id}','${uid}')">Remove</button>
+          </div>`).join('')}
       </div>
     </div>`;
-    // Load client names async
-    enrolled.forEach(uid => loadClientName(uid, s.id));
   });
-  html += '</div>';
+  html+='</div>';
   return html;
 }
 
-// ══ LOAD CLIENT NAME ══
-async function loadClientName(uid, slotId) {
-  const el = document.getElementById(`cn-${uid}-${slotId}`);
-  if (!el) return;
-  try {
-    const snap = await window._FB.getDoc(window._FB.doc(window._FB.db, 'users', uid));
-    if (snap.exists()) {
-      const d = snap.data();
-      el.textContent = d.name || d.email || uid.slice(0,8)+'…';
-      const av = document.getElementById(`cr-${uid}-${slotId}`)?.querySelector('.cr-av');
-      if (av) av.textContent = (d.name || d.email || '??').slice(0,2).toUpperCase();
-      // Also try clients collection for plan info
-      const cSnap = await window._FB.getDoc(window._FB.doc(window._FB.db, 'clients', uid));
-      if (cSnap.exists()) {
-        const cd = cSnap.data();
-        const row = document.getElementById(`cr-${uid}-${slotId}`);
-        if (row) {
-          let planSpan = row.querySelector('.cr-plan');
-          if (!planSpan) { planSpan = document.createElement('div'); planSpan.className = 'cr-plan'; el.parentNode.appendChild(planSpan); }
-          planSpan.textContent = cd.plan || '';
-        }
-      }
-    } else { el.textContent = uid.slice(0,12) + '…'; }
-  } catch (e) { if (el) el.textContent = uid.slice(0,12) + '…'; }
-}
-
-// ══ BOOK ══
-async function book(slotId, slotTime) {
-  const myUid = currentUser?.uid;
-  if (!myUid) { toast('Not signed in.', 'error'); return; }
-  try {
-    const { db, doc, getDoc, updateDoc, setDoc, serverTimestamp } = window._FB;
-    const ref  = doc(db, 'slots', slotId);
-    const snap = await getDoc(ref);
-    if (snap.exists()) {
-      const d = snap.data();
-      const enrolled = d.enrolledClients || [];
-      const cap = d.maxCapacity || 10;
-      if (enrolled.includes(myUid)) { toast('Already booked!', 'info'); return; }
-      if (enrolled.length >= cap)   { toast('Slot is full!', 'error'); return; }
-      await updateDoc(ref, {
-        enrolledClients: [...enrolled, myUid],
-        enrolledCount: enrolled.length + 1,
-        updatedAt: serverTimestamp()
-      });
-    } else {
-      await setDoc(ref, {
-        slotId, slotTime,
-        enrolledClients: [myUid],
-        enrolledCount: 1,
-        maxCapacity: 10,
-        trainerId: '', trainerName: '', trainerGender: '',
-        createdAt: serverTimestamp()
-      });
+// ── LOAD NAMES (admin) ──
+const _nameCache={};
+async function loadName(uid,slotId){
+  const f=window._gyh;
+  if(!document.getElementById(`cln-${uid}-${slotId}`)) return;
+  try{
+    let name='', plan='', ini='';
+    if(_nameCache[uid]){ name=_nameCache[uid].name; plan=_nameCache[uid].plan; ini=_nameCache[uid].ini; }
+    else{
+      const uSnap=await f.getDoc(f.doc(f.db,'users',uid));
+      if(uSnap.exists()){ const d=uSnap.data(); name=d.name||d.email||uid.slice(0,10)+'…'; }
+      const cSnap=await f.getDoc(f.doc(f.db,'clients',uid));
+      if(cSnap.exists()){ const cd=cSnap.data(); plan=cd.plan||''; if(!name)name=cd.name||name; }
+      // also try by email
+      ini=name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2)||uid.slice(0,2).toUpperCase();
+      _nameCache[uid]={name,plan,ini};
     }
-    toast(`✅ Booked: ${slotTime}`, 'success');
-  } catch (e) { toast('Error: ' + e.message, 'error'); }
+    const nEl=document.getElementById(`cln-${uid}-${slotId}`);
+    const pEl=document.getElementById(`clp-${uid}-${slotId}`);
+    const aEl=document.getElementById(`clav-${uid}-${slotId}`);
+    if(nEl)nEl.textContent=name;
+    if(pEl)pEl.textContent=plan;
+    if(aEl)aEl.textContent=ini;
+  }catch(e){ const el=document.getElementById(`cln-${uid}-${slotId}`); if(el)el.textContent=uid.slice(0,12)+'…'; }
 }
 
-// ══ UNBOOK ══
-async function unbook(slotId, slotTime) {
-  const myUid = currentUser?.uid;
-  if (!myUid) { toast('Not signed in.', 'error'); return; }
-  try {
-    const { db, doc, getDoc, updateDoc } = window._FB;
-    const ref  = doc(db, 'slots', slotId);
-    const snap = await getDoc(ref);
-    if (!snap.exists()) { toast('Slot not found.', 'error'); return; }
-    const d = snap.data();
-    const enrolled = (d.enrolledClients || []).filter(id => id !== myUid);
-    await updateDoc(ref, {
-      enrolledClients: enrolled,
-      enrolledCount: enrolled.length
-    });
-    toast(`Unbooked: ${slotTime}`, 'info');
-  } catch (e) { toast('Error: ' + e.message, 'error'); }
+// ── LOAD NAMES (client enrolled chips) ──
+async function loadNameChip(uid, slotId){
+  const f=window._gyh;
+  const nmEl=document.getElementById(`enm-${uid}-${slotId}`);
+  const avEl=document.getElementById(`eav-${uid}-${slotId}`);
+  if(!nmEl) return;
+  try{
+    if(_nameCache[uid]){ if(nmEl)nmEl.textContent=_nameCache[uid].name.split(' ')[0]; if(avEl)avEl.textContent=_nameCache[uid].ini; return; }
+    const uSnap=await f.getDoc(f.doc(f.db,'users',uid));
+    if(uSnap.exists()){
+      const d=uSnap.data();
+      const name=d.name||d.email||uid.slice(0,8)+'…';
+      const ini=name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
+      _nameCache[uid]={name,plan:'',ini};
+      if(nmEl)nmEl.textContent=name.split(' ')[0];
+      if(avEl)avEl.textContent=ini;
+    }
+  }catch(e){}
 }
 
-// ══ ADMIN UNBOOK ══
-async function adminUnbook(slotId, uid) {
-  if (!confirm('Remove this client from the slot?')) return;
-  try {
-    const { db, doc, getDoc, updateDoc } = window._FB;
-    const ref  = doc(db, 'slots', slotId);
-    const snap = await getDoc(ref);
-    if (!snap.exists()) return;
-    const d = snap.data();
-    const enrolled = (d.enrolledClients || []).filter(id => id !== uid);
-    await updateDoc(ref, { enrolledClients: enrolled, enrolledCount: enrolled.length });
-    toast('Client removed from slot.', 'success');
-  } catch (e) { toast('Error: ' + e.message, 'error'); }
+// ── BOOK ──
+async function doBook(slotId, slotTime){
+  const f=window._gyh;
+  const myUid=CU?.uid;
+  if(!myUid){ toast('Not signed in.','error'); return; }
+  // Verify client exists
+  const cSnap=await f.getDoc(f.doc(f.db,'clients',myUid));
+  let isClient=cSnap.exists();
+  if(!isClient){
+    // try by email
+    const q=f.query(f.collection(f.db,'clients'),f.where('email','==',CU.email));
+    const qs=await f.getDocs(q);
+    isClient=!qs.empty;
+  }
+  if(CR==='client' && !isClient){ toast('Your client profile is not set up. Contact your coordinator.','error'); return; }
+  try{
+    const ref=f.doc(f.db,'slots',slotId);
+    const snap=await f.getDoc(ref);
+    if(snap.exists()){
+      const d=snap.data();
+      const enrolled=d.enrolledClients||[];
+      const cap=d.maxCapacity||10;
+      if(enrolled.includes(myUid)){ toast('Already booked!','info'); return; }
+      if(enrolled.length>=cap){ toast('This slot is full!','error'); return; }
+      await f.updateDoc(ref,{ enrolledClients:[...enrolled,myUid], enrolledCount:enrolled.length+1, updatedAt:f.serverTimestamp() });
+    } else {
+      await f.setDoc(f.doc(f.db,'slots',slotId),{ slotId,slotTime,enrolledClients:[myUid],enrolledCount:1,maxCapacity:10,trainerId:'',trainerName:'',trainerGender:'',createdAt:f.serverTimestamp() });
+    }
+    toast(`Booked: ${slotTime} ✅`,'success');
+  }catch(e){ toast('Booking failed: '+e.message,'error'); }
 }
 
-// ══ PERIOD SWITCH ══
-function switchPeriod(p) {
-  currentPeriod = p;
-  // Re-render via cached snapshot – re-trigger listen
-  startListening();
+// ── UNBOOK ──
+async function doUnbook(slotId, slotTime){
+  const f=window._gyh;
+  const myUid=CU?.uid;
+  if(!myUid){ toast('Not signed in.','error'); return; }
+  try{
+    const ref=f.doc(f.db,'slots',slotId);
+    const snap=await f.getDoc(ref);
+    if(!snap.exists()){ toast('Slot not found.','error'); return; }
+    const d=snap.data();
+    const enrolled=(d.enrolledClients||[]).filter(id=>id!==myUid);
+    await f.updateDoc(ref,{ enrolledClients:enrolled, enrolledCount:enrolled.length, updatedAt:f.serverTimestamp() });
+    toast(`Unbooked: ${slotTime}`,'info');
+  }catch(e){ toast('Unbook failed: '+e.message,'error'); }
 }
+
+// ── ADMIN REMOVE ──
+async function adminRemove(slotId, uid){
+  if(!confirm('Remove this client from the slot?')) return;
+  const f=window._gyh;
+  try{
+    const ref=f.doc(f.db,'slots',slotId);
+    const snap=await f.getDoc(ref);
+    if(!snap.exists()) return;
+    const d=snap.data();
+    const enrolled=(d.enrolledClients||[]).filter(id=>id!==uid);
+    await f.updateDoc(ref,{ enrolledClients:enrolled, enrolledCount:enrolled.length, updatedAt:f.serverTimestamp() });
+    toast('Client removed from slot.','success');
+  }catch(e){ toast('Error: '+e.message,'error'); }
+}
+
+// ── PERIOD SWITCH ──
+function switchPeriod(p){ period=p; startListen(); }
 </script>
 </body>
 </html>
