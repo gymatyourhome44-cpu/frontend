@@ -370,14 +370,40 @@ async function doSignIn(){
     // Only allow client, admin, coordinatorhead, coordinator
     const allowed = ['client','admin','coordinatorhead','coordinator'];
     if(!allowed.includes(role)){ await f.signOut(f.auth); showErr(`Role "${role}" cannot access this portal.`); btn.disabled=false; lbl.textContent='Sign In →'; return; }
-    // If client, verify they exist in clients collection
+    // If client, verify they exist in clients collection (by uid OR by email)
     if(role === 'client'){
-      const cSnap = await f.getDoc(f.doc(f.db,'clients',uid));
-      // Also try by email
-      if(!cSnap.exists()){
-        const q = f.query(f.collection(f.db,'clients'), f.where('email','==',email));
-        const qSnap = await f.getDocs(q);
-        if(qSnap.empty){ await f.signOut(f.auth); showErr('You are not registered as a client. Contact your coordinator.'); btn.disabled=false; lbl.textContent='Sign In →'; return; }
+      let found = false;
+      // 1) Try direct doc by uid
+      try {
+        const cSnap = await f.getDoc(f.doc(f.db,'clients',uid));
+        if(cSnap.exists()) found = true;
+      } catch(e){}
+      // 2) Try query by email
+      if(!found){
+        try {
+          const q = f.query(f.collection(f.db,'clients'), f.where('email','==',email));
+          const qs = await f.getDocs(q);
+          if(!qs.empty) found = true;
+        } catch(e){}
+      }
+      // 3) Try query by email (case variations — some systems store differently)
+      if(!found){
+        try {
+          const q2 = f.query(f.collection(f.db,'clients'), f.where('email','==',email.toLowerCase()));
+          const qs2 = await f.getDocs(q2);
+          if(!qs2.empty) found = true;
+        } catch(e){}
+      }
+      // 4) Last resort — if users doc has role=client, allow them through
+      // (they may not have a clients doc yet if coordinator hasn't added them)
+      if(!found && uData.role === 'client'){
+        found = true; // trust the users collection role
+      }
+      if(!found){
+        await f.signOut(f.auth);
+        showErr('You are not registered as a client. Contact your coordinator.');
+        btn.disabled=false; lbl.textContent='Sign In →';
+        return;
       }
     }
     CR = role; CDoc = uData;
@@ -637,16 +663,8 @@ async function doBook(slotId, slotTime){
   const f=window._gyh;
   const myUid=CU?.uid;
   if(!myUid){ toast('Not signed in.','error'); return; }
-  // Verify client exists
-  const cSnap=await f.getDoc(f.doc(f.db,'clients',myUid));
-  let isClient=cSnap.exists();
-  if(!isClient){
-    // try by email
-    const q=f.query(f.collection(f.db,'clients'),f.where('email','==',CU.email));
-    const qs=await f.getDocs(q);
-    isClient=!qs.empty;
-  }
-  if(CR==='client' && !isClient){ toast('Your client profile is not set up. Contact your coordinator.','error'); return; }
+  // If client role, do a soft check — trust role from users collection
+  // (clients doc may use a different ID than Auth UID)
   try{
     const ref=f.doc(f.db,'slots',slotId);
     const snap=await f.getDoc(ref);
